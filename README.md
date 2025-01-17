@@ -7,16 +7,15 @@ This project is used to update the manage the supervisory microcontroller on the
 # Build instructions:
 Install dependencies:
 
-    apt-get update && apt-get install git build-essential meson -y
+    apt-get update && apt-get install git build-essential meson pkgconf libgpiod-dev -y
 
 Download, build, and install on the unit:
 
     git clone https://github.com/embeddedTS/tsmicroctl.git
     cd tsmicroctl
     meson setup builddir
-    cd builddir
-    meson compile
-    meson install
+    meson compile -C builddir
+    meson install -C builddir
 
 # Usage
     Usage: tsmicroctl [OPTION] ...
