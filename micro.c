@@ -85,7 +85,7 @@ int micro_write(int i2cfd, uint16_t addr, const void *data, size_t size)
 	swap_addr = addr >> 8;
 	swap_addr |= (addr & 0xff) << 8;
 
-	memcpy(outdata, &addr, 2);
+	memcpy(outdata, &swap_addr, 2);
 	memcpy(&outdata[2], data, size);
 
 	msg.addr = micro_chip_addr;
