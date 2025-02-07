@@ -103,11 +103,11 @@ int micro_write(int i2cfd, uint16_t addr, const void *data, size_t size)
 	return 0;
 }
 
-uint8_t micro_scaps_discharge_pct(int i2cfd, board_t *board)
+uint8_t micro_scaps_remaining_pct(int i2cfd, board_t *board)
 {
 	uint32_t current_voltage;
 	uint32_t voltage_range, normalized_voltage;
-	uint8_t discharge_percentage;
+	uint8_t remaining_percentage;
 
 	// Read the current supercap voltage
 	if (micro_read32(i2cfd, 16, &current_voltage) < 0) {
@@ -115,26 +115,26 @@ uint8_t micro_scaps_discharge_pct(int i2cfd, board_t *board)
 		exit(EXIT_FAILURE);
 	}
 
-	// Calculate discharge percentage
+	// Calculate remaining percentage
 	if (current_voltage <= MIN_CHARGE_MV) {
-		discharge_percentage = 100;
+		remaining_percentage = 100;
 	} else {
 		normalized_voltage = current_voltage - MIN_CHARGE_MV;
 		voltage_range = MAX_CHARGE_MV - MIN_CHARGE_MV;
 
 		if (normalized_voltage >= voltage_range) {
-			discharge_percentage = 0;
+			remaining_percentage = 0;
 		} else {
-			discharge_percentage = 100 - (normalized_voltage * 100 / voltage_range);
+			remaining_percentage = 100 - (normalized_voltage * 100 / voltage_range);
 		}
 	}
 
-	// Ensure the discharge percentage does not exceed 100%
-	if (discharge_percentage > 100) {
-		discharge_percentage = 100;
+	// Ensure the remaining percentage does not exceed 100%
+	if (remaining_percentage > 100) {
+		remaining_percentage = 100;
 	}
 
-	return discharge_percentage;
+	return remaining_percentage;
 }
 
 uint16_t swap_endian16(uint16_t value)
@@ -222,7 +222,7 @@ void micro_generic_info(int i2cfd, board_t *board)
 	printf("scaps_enabled=%d\n", !!(status_flags & MICRO_STATUS_FLAGS_SCAPS_EN));
 	printf("scaps_met_min=%d\n", !!(status_flags & MICRO_STATUS_FLAGS_SCAPS_MET_MIN));
 	printf("scaps_charging=%d\n", !!(status_flags & MICRO_STATUS_FLAGS_SCAPS_CHARGING));
-	printf("supercaps_chrg_pct=%d\n", micro_scaps_discharge_pct(i2cfd, board));
+	printf("supercaps_remaining_pct=%d\n", micro_scaps_remaining_pct(i2cfd, board));
 
 	if (micro_read16_swap(i2cfd, MICRO_CHARGE_CURRENT, &charge_current) < 0) {
 		perror("Failed to read Supercaps charge current");
@@ -299,10 +299,10 @@ void micro_scaps_block_pct(int i2cfd, board_t *board, int block_pct)
 	assert(block_pct <= 100);
 
 	micro_scaps_en(i2cfd, board, 1);
-	cur_pct = micro_scaps_discharge_pct(i2cfd, board);
+	cur_pct = micro_scaps_remaining_pct(i2cfd, board);
 	while (cur_pct < block_pct) {
 		usleep(1000 * 10);
-		cur_pct = micro_scaps_discharge_pct(i2cfd, board);
+		cur_pct = micro_scaps_remaining_pct(i2cfd, board);
 	}
 }
 
@@ -355,7 +355,7 @@ void micro_scaps_monitor_daemon(int i2cfd, board_t *board, int reboot_pct)
 
 		if ((value == 1 && board->power_fail_active) || (value == 0 && !board->power_fail_active)) {
 			/* POWER_FAIL is asserted */
-			cur_pct = micro_scaps_discharge_pct(i2cfd, board);
+			cur_pct = micro_scaps_remaining_pct(i2cfd, board);
 			if (cur_pct < reboot_pct) {
 				printf("Discharge percentage below threshold, rebooting...\n");
 				system("/sbin/reboot");

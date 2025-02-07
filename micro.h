@@ -57,7 +57,7 @@ int micro_write16_swap(int fd, int addr, uint16_t *data);
 int micro_read32_swap(int fd, int addr, uint32_t *data);
 int micro_write32_swap(int fd, int addr, uint32_t *data);
 
-uint8_t micro_scaps_discharge_pct(int i2cfd, board_t *board);
+uint8_t micro_scaps_remaining_pct(int i2cfd, board_t *board);
 void micro_generic_info(int i2cfd, board_t *board);
 
 void micro_sleep(int i2cfd, board_t *board, uint32_t ms);
