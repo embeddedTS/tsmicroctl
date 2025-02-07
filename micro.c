@@ -105,27 +105,27 @@ int micro_write(int i2cfd, uint16_t addr, const void *data, size_t size)
 
 uint8_t micro_scaps_remaining_pct(int i2cfd, board_t *board)
 {
-	uint32_t current_voltage;
+	uint16_t current_voltage;
 	uint32_t voltage_range, normalized_voltage;
 	uint8_t remaining_percentage;
 
 	// Read the current supercap voltage
-	if (micro_read32(i2cfd, 16, &current_voltage) < 0) {
+	if (micro_read16_swap(i2cfd, MICRO_ADC_8, &current_voltage) < 0) {
 		perror("Failed to read current supercap voltage");
 		exit(EXIT_FAILURE);
 	}
 
 	// Calculate remaining percentage
 	if (current_voltage <= MIN_CHARGE_MV) {
-		remaining_percentage = 100;
+		remaining_percentage = 0;
 	} else {
 		normalized_voltage = current_voltage - MIN_CHARGE_MV;
 		voltage_range = MAX_CHARGE_MV - MIN_CHARGE_MV;
 
 		if (normalized_voltage >= voltage_range) {
-			remaining_percentage = 0;
+			remaining_percentage = 100;
 		} else {
-			remaining_percentage = 100 - (normalized_voltage * 100 / voltage_range);
+			remaining_percentage = (normalized_voltage * 100 / voltage_range);
 		}
 	}
 
