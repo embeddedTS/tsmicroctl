@@ -1,4 +1,5 @@
-project('tsmicroctl', 'c')
+project('tsmicroctl', 'c',
+  default_options: ['c_args=-Wall'])
 gpiod_dep = dependency('libgpiod')
 
 executable('tsmicroctl', 
