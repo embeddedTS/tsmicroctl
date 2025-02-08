@@ -1,5 +1,5 @@
 # tsmicroctl
-This project is used to update the manage the supervisory microcontroller on the:
+This project is used to control the supervisory microcontroller on these platforms:
 * TS-7100
 * TS-7180
 * TS-7800-V2
@@ -26,6 +26,6 @@ Download, build, and install on the unit:
       -w, --wait-pct <percent> Enable charging and block until charged to a set percent
       -b, --daemon <percent>   Monitor power_fail# and issue "reboot" if the supercaps fall below percent
       -i, --info               Print current information about supercaps
-      -c, --current <mA>       Permanently set max charging mA (default 100mA, max 1000)
+      -c, --current <mA>       Permanently set max charging mA (default 100mA, max 950)
       -s, --sleep <seconds>    Turns off power to everything for a specified number of seconds
       -h, --help               This message
