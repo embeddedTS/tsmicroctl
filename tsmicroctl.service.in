@@ -1,0 +1,14 @@
+[Unit]
+Description=tsmicroctl Daemon
+After=network.target
+
+[Service]
+ExecStart=@bindir@/tsmicroctl --daemon 50
+Restart=always
+User=root
+Group=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

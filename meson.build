@@ -13,3 +13,11 @@ executable('tsmicroctl',
   dependencies : [gpiod_dep],
   install : true
 )
+
+configure_file(
+    input: 'tsmicroctl.service.in',
+    output: 'tsmicroctl.service',
+    configuration: {
+        'bindir': join_paths(get_option('prefix'), get_option('bindir'))
+    }
+)
