@@ -154,8 +154,8 @@ int main(int argc, char *argv[])
 		board->info_function(i2cfd, board);
 	}
 	if (opt_current != -1) {
-		if (opt_current < 50 || opt_current > 1000) {
-			fprintf(stderr, "Current must be between 50mA and 1000mA\n");
+		if (opt_current < 50 || opt_current > 950) {
+			fprintf(stderr, "Current must be between 50mA and 950mA\n");
 			return 1;
 		}
 
