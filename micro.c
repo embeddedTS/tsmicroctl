@@ -17,6 +17,9 @@
 
 static int micro_chip_addr;
 
+bool read_power_fail_status(struct gpiod_line *line, board_t *board);
+struct gpiod_chip *init_power_fail_gpio(board_t *board, struct gpiod_line **line, const char *consumer_name);
+
 int micro_init(int i2cbus, int i2caddr)
 {
 	static int fd = -1;
@@ -184,6 +187,9 @@ void micro_generic_info(int i2cfd, board_t *board)
 	uint8_t status_flags;
 	uint8_t revision;
 	char build[80];
+	struct gpiod_chip *chip;
+	struct gpiod_line *line;
+	bool power_failed_gpio_asserted;
 
 	if (micro_read8(i2cfd, MICRO_REVISION, &revision) < 0) {
 		perror("Failed to read microcontroller version");
@@ -197,14 +203,14 @@ void micro_generic_info(int i2cfd, board_t *board)
 	}
 	printf("micro_build=\"%s\"\n", build);
 
-	if (micro_read16_swap(i2cfd, MICRO_ADC_4, (uint16_t *)&startup_temp) < 0) {
+	if (micro_read16_swap(i2cfd, MICRO_ADC_4, &startup_temp) < 0) {
 		perror("Failed to read startup temperature");
 		exit(1);
 	}
 	printf("micro_startup_celcius=%d\n", startup_temp);
 
-	if (micro_read16_swap(i2cfd, MICRO_ADC_10, (uint16_t *)&temp) < 0) {
-		perror("Failed to read startup temperature");
+	if (micro_read16_swap(i2cfd, MICRO_ADC_10, &temp) < 0) {
+		perror("Failed to read current temperature");
 		exit(1);
 	}
 	printf("micro_celcius=%d\n", temp);
@@ -229,11 +235,19 @@ void micro_generic_info(int i2cfd, board_t *board)
 		exit(1);
 	}
 	printf("supercaps_charge_current_ma=%d\n", charge_current);
+
 	if (micro_read16_swap(i2cfd, MICRO_CHARGE_CURRENT_DEFAULT, &charge_current) < 0) {
-		perror("Failed to read Supercaps charge current");
+		perror("Failed to read Supercaps charge current default");
 		exit(1);
 	}
 	printf("supercaps_charge_current_default_ma=%d\n", charge_current);
+
+	chip = init_power_fail_gpio(board, &line, "micro_generic_info");
+	power_failed_gpio_asserted = read_power_fail_status(line, board);
+	printf("power_failed_gpio_asserted=%d\n", power_failed_gpio_asserted);
+
+	// Cleanup
+	gpiod_chip_close(chip);
 }
 
 #define MAX_SLEEP_SECONDS (UINT32_MAX / 100)
@@ -264,6 +278,13 @@ void micro_sleep(int i2cfd, board_t *board, uint32_t seconds)
 	buf[3] = (ms >> 24) & 0xff;
 	buf[4] = 2; // Command code for sleep (assuming it’s 2)
 
+
+	// Debugging: Verify sleep write values
+	printf("Sent sleep command: ms=%u, buf=[%02x %02x %02x %02x %02x]\n",
+		ms, buf[0], buf[1], buf[2], buf[3], buf[4]);
+
+	sleep(1);
+
 	// Write the data to the microcontroller
 	if (micro_write(i2cfd, 1024, buf, sizeof(buf)) < 0) {
 		perror("Failed to write sleep command to microcontroller");
@@ -293,37 +314,106 @@ void micro_scaps_en(int i2cfd, board_t *board, int en)
 	micro_write8(i2cfd, MICRO_STATUS_FLAGS, &value);
 }
 
+struct gpiod_chip *init_power_fail_gpio(board_t *board, struct gpiod_line **line, const char *consumer_name)
+{
+	struct gpiod_chip *chip = gpiod_chip_open_by_label(board->power_fail_bank);
+	if (!chip) {
+		perror("Failed to open GPIO chip by label");
+		exit(1);
+	}
+
+	*line = gpiod_chip_get_line(chip, board->power_fail_io);
+	if (!*line) {
+		perror("Failed to get GPIO line");
+		gpiod_chip_close(chip);
+		exit(1);
+	}
+
+	struct gpiod_line_request_config config = {
+		.consumer = consumer_name,
+		.request_type = GPIOD_LINE_REQUEST_DIRECTION_INPUT
+	};
+
+	if (gpiod_line_request(*line, &config, 0) < 0) {
+		perror("Failed to request GPIO line as input");
+		gpiod_chip_close(chip);
+		exit(1);
+	}
+
+	return chip; // Return the opened GPIO chip for later cleanup
+}
+
+bool read_power_fail_status(struct gpiod_line *line, board_t *board)
+{
+	int value = gpiod_line_get_value(line);
+	if (value < 0) {
+		perror("Failed to read GPIO value");
+		exit(1);
+	}
+	return (value == board->power_fail_active);
+}
+
+// Blocks until charge is above `block_pct` and power fail is cleared
 void micro_scaps_block_pct(int i2cfd, board_t *board, int block_pct)
 {
 	uint8_t cur_pct;
+	struct gpiod_chip *chip;
+	struct gpiod_line *line;
+	bool charge_ok, power_fail_clear;
+	int counter = 0;
+
 	assert(block_pct <= 100);
 
 	micro_scaps_en(i2cfd, board, 1);
-	cur_pct = micro_scaps_remaining_pct(i2cfd, board);
-	while (cur_pct < block_pct) {
-		usleep(1000 * 10);
+	chip = init_power_fail_gpio(board, &line, "micro_scaps_block_pct");
+
+	while (true) {
 		cur_pct = micro_scaps_remaining_pct(i2cfd, board);
+		power_fail_clear = !read_power_fail_status(line, board);
+		charge_ok = (cur_pct >= block_pct);
+
+		// Print status once per second
+		if (counter % 10 == 0) {
+			printf("Supercap Charge: %d%% (Target: %d%%) | Power Fail: %s\n",
+			       cur_pct, block_pct, power_fail_clear ? "No" : "YES");
+			fflush(stdout);
+		}
+
+		if (charge_ok && power_fail_clear) {
+			break;
+		}
+
+		usleep(1000 * 100);
+		counter++;
 	}
+
+	gpiod_chip_close(chip);
 }
 
+// Monitors supercaps and triggers a reboot if charge is too low while power fails
 void micro_scaps_monitor_daemon(int i2cfd, board_t *board, int reboot_pct)
 {
-	uint8_t cur_pct;
+	uint8_t cur_pct = 0;
 	uint8_t status_flags;
 	struct gpiod_chip *chip;
 	struct gpiod_line *line;
-	int value;
+	bool current_power_fail = false;
+	bool power_fail_active = false;
+	bool monitor_i2c = true;
+	bool suppress_print = false;
+	int counter = 0;
+	int sleep_time = 100000; // Default sleep: 100ms
+	int print_interval = 10; // Default print every 1s (10 x 100ms)
 
 	assert(reboot_pct <= 100);
 
-	// Read status flags (8-bit read)
 	if (micro_read8(i2cfd, MICRO_STATUS_FLAGS, &status_flags) < 0) {
 		perror("Failed to read status flags");
 		exit(1);
 	}
 
 	if (board->has_silo == 0) {
-		printf("Supercaps not present, exiting.");
+		printf("Supercaps not present, exiting.\n");
 		return;
 	}
 
@@ -332,37 +422,57 @@ void micro_scaps_monitor_daemon(int i2cfd, board_t *board, int reboot_pct)
 		return;
 	}
 
-	chip = gpiod_chip_open_by_name(board->power_fail_bank);
-	if (!chip) {
-		perror("Failed to open GPIO chip");
-		exit(1);
-	}
-
-	line = gpiod_chip_get_line(chip, board->power_fail_io);
-	if (!line) {
-		perror("Failed to get GPIO line");
-		gpiod_chip_close(chip);
-		exit(1);
-	}
+	chip = init_power_fail_gpio(board, &line, "micro_scaps_monitor_daemon");
 
 	while (true) {
-		value = gpiod_line_get_value(line);
-		if (value < 0) {
-			perror("Failed to read GPIO value");
-			gpiod_chip_close(chip);
-			exit(1);
+		current_power_fail = read_power_fail_status(line, board);
+
+		if (current_power_fail && !power_fail_active) {
+			monitor_i2c = true;
+			power_fail_active = true;
+			sleep_time = 100000; // Reset polling to 100ms
+			print_interval = 10; // Print every 1s (10 x 100ms)
+			suppress_print = false; // Allow prints again
+			continue;
 		}
 
-		if ((value == 1 && board->power_fail_active) || (value == 0 && !board->power_fail_active)) {
-			/* POWER_FAIL is asserted */
+		if (monitor_i2c) {
 			cur_pct = micro_scaps_remaining_pct(i2cfd, board);
-			if (cur_pct < reboot_pct) {
-				printf("Discharge percentage below threshold, rebooting...\n");
-				system("/sbin/reboot");
-			}
-			usleep(1000 * 100);
-		} else {
-			usleep(1000 * 500);
 		}
+
+		if ((power_fail_active || cur_pct < 100) && counter % print_interval == 0) {
+			printf("Supercap Charge: %d%% (Reboot Threshold: %d%%) | Power Fail: %s\n",
+			       cur_pct, reboot_pct, current_power_fail ? "YES" : "No");
+			fflush(stdout);
+		}
+
+		if (power_fail_active && cur_pct < reboot_pct) {
+			printf("Discharge percentage below threshold, rebooting...\n");
+			fflush(stdout);
+			system("/sbin/reboot");
+		}
+
+		if (!current_power_fail && power_fail_active) {
+			printf("Power restored. Supercap Charge: %d%%\n", cur_pct);
+			fflush(stdout);
+			power_fail_active = false;
+
+			if (cur_pct == 100) {
+				monitor_i2c = false;
+				sleep_time = 1000000; // Reduce polling to 1 second
+				print_interval = 1;   // Print once per sleep cycle (1s)
+				suppress_print = true;
+			}
+		}
+
+		if (suppress_print && cur_pct == 100 && !power_fail_active) {
+			usleep(sleep_time);
+			continue;
+		}
+
+		usleep(sleep_time);
+		counter++;
 	}
+
+	gpiod_chip_close(chip);
 }
