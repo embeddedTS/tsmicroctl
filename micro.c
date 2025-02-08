@@ -250,7 +250,7 @@ void micro_generic_info(int i2cfd, board_t *board)
 	gpiod_chip_close(chip);
 }
 
-#define MAX_SLEEP_SECONDS (UINT32_MAX / 100)
+#define MAX_SLEEP_SECONDS (UINT32_MAX / 1000) 
 
 void micro_sleep(int i2cfd, board_t *board, uint32_t seconds)
 {
@@ -264,28 +264,18 @@ void micro_sleep(int i2cfd, board_t *board, uint32_t seconds)
 		exit(EXIT_FAILURE);
 	}
 
-	// Convert seconds to milliseconds, then to 10ms units
-	ms = seconds * 100;
+	ms = seconds * 1000;
 	if (ms % 10)
 		ms = (ms / 10) + 1;
 	else
 		ms = ms / 10;
 
-	// Pack the milliseconds and command into the buffer
 	buf[0] = ms & 0xff;
 	buf[1] = (ms >> 8) & 0xff;
 	buf[2] = (ms >> 16) & 0xff;
 	buf[3] = (ms >> 24) & 0xff;
-	buf[4] = 2; // Command code for sleep (assuming it’s 2)
+	buf[4] = MICRO_CMD_SLEEP;
 
-
-	// Debugging: Verify sleep write values
-	printf("Sent sleep command: ms=%u, buf=[%02x %02x %02x %02x %02x]\n",
-		ms, buf[0], buf[1], buf[2], buf[3], buf[4]);
-
-	sleep(1);
-
-	// Write the data to the microcontroller
 	if (micro_write(i2cfd, 1024, buf, sizeof(buf)) < 0) {
 		perror("Failed to write sleep command to microcontroller");
 		exit(EXIT_FAILURE);
