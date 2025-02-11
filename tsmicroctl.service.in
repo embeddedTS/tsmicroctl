@@ -4,7 +4,8 @@ After=network.target
 
 [Service]
 ExecStart=@bindir@/tsmicroctl --daemon 50
-Restart=always
+Restart=on-failure
+SuccessExitStatus=0
 User=root
 Group=root
 StandardOutput=journal
