@@ -189,9 +189,6 @@ void micro_generic_info(int i2cfd, board_t *board)
 	uint8_t status_flags;
 	uint8_t revision;
 	char build[80];
-	struct gpiod_chip *chip;
-	struct gpiod_line *line;
-	bool power_failed_gpio_asserted;
 
 	if (micro_read8(i2cfd, MICRO_REVISION, &revision) < 0) {
 		perror("Failed to read microcontroller version");
@@ -243,13 +240,6 @@ void micro_generic_info(int i2cfd, board_t *board)
 		exit(1);
 	}
 	printf("supercaps_charge_current_default_ma=%d\n", charge_current);
-
-	chip = init_power_fail_gpio(board, &line, "micro_generic_info");
-	power_failed_gpio_asserted = read_power_fail_status(line, board);
-	printf("power_failed_gpio_asserted=%d\n", power_failed_gpio_asserted);
-
-	// Cleanup
-	gpiod_chip_close(chip);
 }
 
 #define MAX_SLEEP_SECONDS (UINT32_MAX / 1000) 
