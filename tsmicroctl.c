@@ -28,7 +28,7 @@ void usage(char **argv)
 		"  -w, --wait-pct <percent> Enable charging and block until charged to a set percent\n"
 		"  -b, --daemon <percent>   Monitor power_fail# and issue \"reboot\" if the supercaps fall below percent\n"
 		"  -i, --info               Print current information about supercaps\n"
-		"  -c, --current <mA>       Permanently set max charging mA (default 100mA, max 1000)\n"
+		"  -c, --current <mA>       Permanently set max charging mA (default 100mA, max 950mA)\n"
 		"  -s, --sleep <seconds>    Turns off power to everything for a specified number of seconds\n"
 		"  -h, --help               This message\n"
 		"\n",
