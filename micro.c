@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <fcntl.h>
 #include <gpiod.h>
+#include <errno.h>
+#include <syslog.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <linux/i2c.h>
@@ -390,25 +392,27 @@ void micro_scaps_monitor_daemon(int i2cfd, board_t *board, int reboot_pct)
 	bool current_power_fail = false;
 	bool power_fail_active = false;
 	bool monitor_i2c = true;
-	bool suppress_print = false;
+	bool suppress_message = false;
 	int counter = 0;
 	int sleep_time = 100000; // Default sleep: 100ms
 	int print_interval = 10; // Default print every 1s (10 x 100ms)
 
+	openlog("tsmicroctl", LOG_PID | LOG_CONS, LOG_DAEMON);
+
 	assert(reboot_pct <= 100);
 
 	if (micro_read8(i2cfd, MICRO_STATUS_FLAGS, &status_flags) < 0) {
-		perror("Failed to read status flags");
+		syslog(LOG_ERR, "Failed to read status flags: %s", strerror(errno));
 		exit(1);
 	}
 
 	if (board->has_silo == 0) {
-		printf("Supercaps not present, exiting.\n");
+		syslog(LOG_INFO, "Supercaps not present, exiting.");
 		return;
 	}
 
 	if ((status_flags & MICRO_STATUS_FLAGS_SCAPS_EN) == 0) {
-		printf("Supercaps not enabled, exiting and not monitoring charge\n");
+		syslog(LOG_INFO, "Supercaps not enabled, exiting and not monitoring charge");
 		return;
 	}
 
@@ -422,7 +426,7 @@ void micro_scaps_monitor_daemon(int i2cfd, board_t *board, int reboot_pct)
 			power_fail_active = true;
 			sleep_time = 100000; // Reset polling to 100ms
 			print_interval = 10; // Print every 1s (10 x 100ms)
-			suppress_print = false; // Allow prints again
+			suppress_message = false; // Allow prints again
 			continue;
 		}
 
@@ -431,31 +435,28 @@ void micro_scaps_monitor_daemon(int i2cfd, board_t *board, int reboot_pct)
 		}
 
 		if ((power_fail_active || cur_pct < 100) && counter % print_interval == 0) {
-			printf("Supercap Charge: %d%% (Reboot Threshold: %d%%) | Power Fail: %s\n",
+			syslog(LOG_INFO, "Supercap Charge: %d%% (Reboot Threshold: %d%%) | Power Fail: %s",
 			       cur_pct, reboot_pct, current_power_fail ? "YES" : "No");
-			fflush(stdout);
 		}
 
 		if (power_fail_active && cur_pct < reboot_pct) {
-			printf("Discharge percentage below threshold, rebooting...\n");
-			fflush(stdout);
+			syslog(LOG_INFO, "Discharge percentage below threshold, rebooting...");
 			system("/sbin/reboot");
 		}
 
 		if (!current_power_fail && power_fail_active) {
-			printf("Power restored. Supercap Charge: %d%%\n", cur_pct);
-			fflush(stdout);
+			syslog(LOG_INFO, "Power restored. Supercap Charge: %d%%", cur_pct);
 			power_fail_active = false;
 
 			if (cur_pct == 100) {
 				monitor_i2c = false;
 				sleep_time = 1000000; // Reduce polling to 1 second
 				print_interval = 1;   // Print once per sleep cycle (1s)
-				suppress_print = true;
+				suppress_message = true;
 			}
 		}
 
-		if (suppress_print && cur_pct == 100 && !power_fail_active) {
+		if (suppress_message && cur_pct == 100 && !power_fail_active) {
 			usleep(sleep_time);
 			continue;
 		}
@@ -463,6 +464,8 @@ void micro_scaps_monitor_daemon(int i2cfd, board_t *board, int reboot_pct)
 		usleep(sleep_time);
 		counter++;
 	}
+
+	closelog();
 
 	gpiod_chip_close(chip);
 }
