@@ -34,6 +34,7 @@ typedef struct board {
     int power_fail_active;
     int has_silo;
     int max_current;
+    int min_current;
 } board_t;
 
 int micro_init(int i2cbus, int i2caddr);

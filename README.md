@@ -26,6 +26,6 @@ Download, build, and install on the unit:
       -w, --wait-pct <percent> Enable charging and block until charged to a set percent
       -b, --daemon <percent>   Monitor power_fail# and issue "reboot" if the supercaps fall below percent
       -i, --info               Print current information about supercaps
-      -c, --current <mA>       Permanently set max charging mA (default 100mA, max 900)
+      -c, --current <mA>       Permanently set max charging mA
       -s, --sleep <seconds>    Turns off power to everything for a specified number of seconds
       -h, --help               This message
