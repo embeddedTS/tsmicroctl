@@ -276,10 +276,8 @@ void micro_sleep(int i2cfd, board_t *board, uint32_t seconds)
 
 void micro_set_charge_current(int i2cfd, board_t *board, uint16_t ma)
 {
-	if (board->max_current > ma) {
-		printf("Capping current to max %d mA.\n", board->max_current);
-		ma = board->max_current;
-	}
+	assert(ma >= board->min_current);
+	assert(ma <= board->max_current);
 	/* Write both the current and persistent charge rate */
 	micro_write16_swap(i2cfd, MICRO_CHARGE_CURRENT_DEFAULT, &ma);
 	micro_write16_swap(i2cfd, MICRO_CHARGE_CURRENT, &ma);

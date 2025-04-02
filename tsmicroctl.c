@@ -17,7 +17,7 @@
 #include "ts7180.h"
 #include "ts7800v2.h"
 
-void usage(char **argv)
+void usage(char **argv, board_t *board)
 {
 	fprintf(stderr,
 		"Usage: %s [OPTION] ...\n"
@@ -28,11 +28,13 @@ void usage(char **argv)
 		"  -w, --wait-pct <percent> Enable charging and block until charged to a set percent\n"
 		"  -b, --daemon <percent>   Monitor power_fail# and issue \"reboot\" if the supercaps fall below percent\n"
 		"  -i, --info               Print current information about supercaps\n"
-		"  -c, --current <mA>       Permanently set max charging mA (default 100mA, max 950mA)\n"
+		"  -c, --current <mA>       Permanently set max charging mA (default: 100, min: %d, max: %d)\n"
 		"  -s, --sleep <seconds>    Turns off power to everything for a specified number of seconds\n"
 		"  -h, --help               This message\n"
 		"\n",
-		argv[0]);
+		argv[0],
+		board->min_current,
+		board->max_current);
 }
 
 board_t boards[] = {
@@ -82,8 +84,14 @@ int main(int argc, char *argv[])
 	int opt_current = -1;
 	int opt_sleep = -1;
 
+	board = get_board();
+	if (board == NULL) {
+		printf("Unsupported platform\n");
+		return 1;
+	}
+
 	if (argc < 2) {
-		usage(argv);
+		usage(argv, board);
 		return 1;
 	}
 
@@ -121,21 +129,16 @@ int main(int argc, char *argv[])
 			opt_sleep = atoi(optarg);
 			break;
 		case 'h':
-			usage(argv);
+			usage(argv, board);
 			return 0;
 		case '?':
 		default:
 			fprintf(stderr, "Unexpected argument \"%s\"\n", optarg);
-			usage(argv);
+			usage(argv, board);
 			return 1;
 		}
 	}
 
-	board = get_board();
-	if (!board) {
-		printf("Unsupported board\n");
-		return 1;
-	}
 	i2cfd = micro_init(board->i2c_bus, board->i2c_chip);
 
 	if (opt_enable) {
@@ -154,8 +157,10 @@ int main(int argc, char *argv[])
 		board->info_function(i2cfd, board);
 	}
 	if (opt_current != -1) {
-		if (opt_current < 50 || opt_current > 950) {
-			fprintf(stderr, "Current must be between 50mA and 950mA\n");
+		if (opt_current < board->min_current || opt_current > board->max_current) {
+			fprintf(stderr, "Current must be between %d mA and %d mA\n",
+				board->min_current,
+				board->max_current);
 			return 1;
 		}
 

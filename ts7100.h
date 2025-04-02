@@ -11,5 +11,6 @@ const board_t ts7100_board = {
 	.power_fail_active = 1,
 	.power_fail_bank = "20ac000.gpio",
 	.power_fail_io = 0,
-	.max_current = 950,
+	.max_current = 900,
+	.min_current = 50,
 };
