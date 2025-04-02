@@ -28,7 +28,7 @@ void usage(char **argv, board_t *board)
 		"  -w, --wait-pct <percent> Enable charging and block until charged to a set percent\n"
 		"  -b, --daemon <percent>   Monitor power_fail# and issue \"reboot\" if the supercaps fall below percent\n"
 		"  -i, --info               Print current information about supercaps\n"
-		"  -c, --current <mA>       Permanently set max charging mA (default 100mA, min %dmA, max %dmA)\n"
+		"  -c, --current <mA>       Permanently set max charging mA (default: 100, min: %d, max: %d)\n"
 		"  -s, --sleep <seconds>    Turns off power to everything for a specified number of seconds\n"
 		"  -h, --help               This message\n"
 		"\n",
@@ -85,8 +85,8 @@ int main(int argc, char *argv[])
 	int opt_sleep = -1;
 
 	board = get_board();
-	if (!board) {
-		printf("Unsupported board\n");
+	if (board == NULL) {
+		printf("Unsupported platform\n");
 		return 1;
 	}
 
@@ -158,7 +158,7 @@ int main(int argc, char *argv[])
 	}
 	if (opt_current != -1) {
 		if (opt_current < board->min_current || opt_current > board->max_current) {
-			fprintf(stderr, "Current must be between %dmA and %dmA\n",
+			fprintf(stderr, "Current must be between %d mA and %d mA\n",
 				board->min_current,
 				board->max_current);
 			return 1;
