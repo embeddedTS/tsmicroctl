@@ -61,7 +61,7 @@ int micro_write32_swap(int fd, int addr, uint32_t *data);
 uint8_t micro_scaps_remaining_pct(int i2cfd, board_t *board);
 void micro_generic_info(int i2cfd, board_t *board);
 
-void micro_sleep(int i2cfd, board_t *board, uint32_t ms);
+void micro_sleep(int i2cfd, board_t *board, uint32_t seconds);
 void micro_set_charge_current(int i2cfd, board_t *board, uint16_t ma);
 void micro_scaps_en(int i2cfd, board_t *board, int en);
 void micro_scaps_block_pct(int i2cfd, board_t *board, int pct);
