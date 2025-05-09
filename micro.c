@@ -84,13 +84,20 @@ int micro_write(int i2cfd, uint16_t addr, const void *data, size_t size)
 {
 	struct i2c_rdwr_ioctl_data packets;
 	struct i2c_msg msg;
-	uint8_t outdata[6];
-	uint16_t swap_addr;
+	uint8_t outdata[4096];
 
-	swap_addr = addr >> 8;
-	swap_addr |= (addr & 0xff) << 8;
+	/* The max size of 4k is not arbitrary, but may no longer be a limitation
+	 * in the future. In older implementations, it was found that 4k was the
+	 * max message size that could be sent in a single ioctl(). In theory,
+	 * it should be 64k, as the kernel uses 16-bits for length. However, it has
+	 * been found that some hardware, or drivers, or something was limited to 4k
+	 * on some platforms. We stick to that, knowing that we need to limit data
+	 * to 4094 bytes, plus 2 bytes of address for this interface.
+	 */
+	assert(size <= 4094);
 
-	memcpy(outdata, &swap_addr, 2);
+	outdata[0] = ((addr >> 8) & 0xff);
+	outdata[1] = (addr & 0xff);
 	memcpy(&outdata[2], data, size);
 
 	msg.addr = micro_chip_addr;
