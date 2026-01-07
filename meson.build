@@ -1,10 +1,11 @@
 project('tsmicroctl', 'c',
   default_options: ['c_args=-Wall'])
-gpiod_dep = dependency('libgpiod')
+gpiod_dep = dependency('libgpiod', version : '>=2.0')
 
 executable('tsmicroctl', 
   [
     'tsmicroctl.c',
+    'gpiod-helper.c',
     'micro.c',
     'ts7100.c',
     'ts7180.c',

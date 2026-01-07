@@ -13,14 +13,12 @@
 #include <linux/i2c-dev.h>
 
 #include "micro.h"
+#include "gpiod-helper.h"
 
 #define MIN_CHARGE_MV 3680
 #define MAX_CHARGE_MV 4800
 
 static int micro_chip_addr;
-
-bool read_power_fail_status(struct gpiod_line *line, board_t *board);
-struct gpiod_chip *init_power_fail_gpio(board_t *board, struct gpiod_line **line, const char *consumer_name);
 
 int micro_init(int i2cbus, int i2caddr)
 {
@@ -301,62 +299,40 @@ void micro_scaps_en(int i2cfd, board_t *board, int en)
 	micro_write8(i2cfd, MICRO_STATUS_FLAGS, &value);
 }
 
-struct gpiod_chip *init_power_fail_gpio(board_t *board, struct gpiod_line **line, const char *consumer_name)
+static bool read_power_fail_status(struct gpiod_line_request *line, board_t *board)
 {
-	struct gpiod_chip *chip = gpiod_chip_open_by_label(board->power_fail_bank);
-	if (!chip) {
-		perror("Failed to open GPIO chip by label");
-		exit(1);
-	}
-
-	*line = gpiod_chip_get_line(chip, board->power_fail_io);
-	if (!*line) {
-		perror("Failed to get GPIO line");
-		gpiod_chip_close(chip);
-		exit(1);
-	}
-
-	struct gpiod_line_request_config config = {
-		.consumer = consumer_name,
-		.request_type = GPIOD_LINE_REQUEST_DIRECTION_INPUT
-	};
-
-	if (gpiod_line_request(*line, &config, 0) < 0) {
-		perror("Failed to request GPIO line as input");
-		gpiod_chip_close(chip);
-		exit(1);
-	}
-
-	return chip; // Return the opened GPIO chip for later cleanup
-}
-
-bool read_power_fail_status(struct gpiod_line *line, board_t *board)
-{
-	int value = gpiod_line_get_value(line);
-	if (value < 0) {
+	enum gpiod_line_value value = gpiod_line_request_get_value(line,
+								   board->power_fail_io);
+	if (value == GPIOD_LINE_VALUE_ERROR) {
 		perror("Failed to read GPIO value");
 		exit(1);
 	}
-	return (value == board->power_fail_active);
+	return (value == (board->power_fail_active ? GPIOD_LINE_VALUE_ACTIVE :
+						     GPIOD_LINE_VALUE_INACTIVE));
 }
 
 // Blocks until charge is above `block_pct` and power fail is cleared
 void micro_scaps_block_pct(int i2cfd, board_t *board, int block_pct)
 {
 	uint8_t cur_pct;
-	struct gpiod_chip *chip;
-	struct gpiod_line *line;
+	struct gpiod_line_request *power_fail_line = NULL;
 	bool charge_ok, power_fail_clear;
 	int counter = 0;
 
 	assert(block_pct <= 100);
 
 	micro_scaps_en(i2cfd, board, 1);
-	chip = init_power_fail_gpio(board, &line, "micro_scaps_block_pct");
+	power_fail_line = request_input_line(board->power_fail_gpiochip,
+					     board->power_fail_io,
+					     "micro_scaps_block_pct");
+	if (power_fail_line == NULL) {
+		perror("Failed to get POWER_FAIL GPIO line");
+		exit(1);
+	}
 
 	while (true) {
 		cur_pct = micro_scaps_remaining_pct(i2cfd, board);
-		power_fail_clear = !read_power_fail_status(line, board);
+		power_fail_clear = !read_power_fail_status(power_fail_line, board);
 		charge_ok = (cur_pct >= block_pct);
 
 		// Print status once per second
@@ -374,7 +350,7 @@ void micro_scaps_block_pct(int i2cfd, board_t *board, int block_pct)
 		counter++;
 	}
 
-	gpiod_chip_close(chip);
+	gpiod_line_request_release(power_fail_line);
 }
 
 // Monitors supercaps and triggers a reboot if charge is too low while power fails
@@ -382,8 +358,7 @@ void micro_scaps_monitor_daemon(int i2cfd, board_t *board, int reboot_pct)
 {
 	uint8_t cur_pct = 0;
 	uint8_t status_flags;
-	struct gpiod_chip *chip;
-	struct gpiod_line *line;
+	struct gpiod_line_request *power_fail_line = NULL;
 	bool current_power_fail = false;
 	bool power_fail_active = false;
 	bool monitor_i2c = true;
@@ -411,10 +386,12 @@ void micro_scaps_monitor_daemon(int i2cfd, board_t *board, int reboot_pct)
 		return;
 	}
 
-	chip = init_power_fail_gpio(board, &line, "micro_scaps_monitor_daemon");
+	power_fail_line = request_input_line(board->power_fail_gpiochip,
+					     board->power_fail_io,
+					     "micro_scaps_block_pct");
 
 	while (true) {
-		current_power_fail = read_power_fail_status(line, board);
+		current_power_fail = read_power_fail_status(power_fail_line, board);
 
 		if (current_power_fail && !power_fail_active) {
 			monitor_i2c = true;
@@ -461,6 +438,4 @@ void micro_scaps_monitor_daemon(int i2cfd, board_t *board, int reboot_pct)
 	}
 
 	closelog();
-
-	gpiod_chip_close(chip);
 }
