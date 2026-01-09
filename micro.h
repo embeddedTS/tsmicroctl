@@ -29,7 +29,7 @@ typedef struct board {
     int i2c_bus;
     int i2c_chip;
     void (*info_function)(int i2cfd, struct board *board);
-    const char *power_fail_bank;
+    const char *power_fail_gpiochip;
     int power_fail_io;
     int power_fail_active;
     int has_silo;
